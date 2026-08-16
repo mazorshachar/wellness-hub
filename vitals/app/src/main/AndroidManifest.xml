@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Health Connect read permissions.
+      Every permission listed here must ALSO be justified in the Play Console
+      "Health apps declaration" form before the app can be published.
+      Remove any you don't actually use — Google rejects over-requesting.
+    -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+    <uses-permission android:name="android.permission.health.READ_BODY_FAT" />
+    <uses-permission android:name="android.permission.health.READ_BLOOD_PRESSURE" />
+
+    <!--
+      Optional. Android 15+ restricts reads to the last 30 days unless this is
+      granted. Uncomment only if you add long-range history charts — it needs its
+      own justification in the Play declaration form.
+    -->
+    <!-- <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" /> -->
+
+    <!-- Transcription and nutrient lookup are network calls. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      Reads voice notes from shared storage. Samsung's recorder writes to
+      Recordings/, and notes made on a Galaxy Watch are transferred there too.
+      Unlike the health permissions above, this one needs no Play declaration form.
+    -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!--
+      Required on Android 13 and below, where Health Connect is a separate app
+      rather than part of the OS. Without this, package visibility rules hide it.
+    -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
+
+    <application
+        android:name=".VitalsApp"
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Vitals">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Vitals">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <!--
+          The privacy screen Health Connect links to from its permission sheet.
+          Play's health policy requires this to show the same policy as the store
+          listing, so it must be its own screen rather than the dashboard.
+        -->
+        <activity
+            android:name=".PermissionsRationaleActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Vitals">
+            <!-- Android 13 and below. -->
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          Android 14+ (API 34): the rationale is delivered as a permission-usage
+          intent instead. Both declarations are needed to cover all versions.
+        -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".PermissionsRationaleActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
+
+    </application>
+
+</manifest>
