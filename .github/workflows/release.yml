@@ -69,6 +69,33 @@ jobs:
           set -o pipefail
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee build-log.txt
 
+      # Full logs and job summaries need a GitHub login. Annotations do not,
+      # so the failure is re-emitted as error annotations on the run page.
+      - name: Report failure as annotations
+        if: failure()
+        run: |
+          if [ ! -f build-log.txt ]; then
+            echo "::error title=No build log::Gradle produced no output - the job failed before the build step."
+            exit 0
+          fi
+          : > err.txt
+          # Compiler errors appear BEFORE the FAILURE block, so collect both.
+          grep -E "^e: |^error:|^w: .*error|Unresolved reference|Could not (find|resolve|download)|requires .* or higher|No matching variant" build-log.txt | head -24 >> err.txt || true
+          awk '/^FAILURE: /{f=1} f' build-log.txt | head -30 >> err.txt || true
+          if [ ! -s err.txt ]; then
+            tail -n 60 build-log.txt > err.txt
+          fi
+          n=0
+          while [ "$n" -lt 8 ]; do
+            start=$(( n * 6 + 1 ))
+            end=$(( n * 6 + 6 ))
+            chunk=$(sed -n "${start},${end}p" err.txt)
+            if [ -z "$chunk" ]; then break; fi
+            enc=$(printf '%s' "$chunk" | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+            echo "::error title=Build failure part $n::${enc}"
+            n=$(( n + 1 ))
+          done
+
       # Full logs need a GitHub login to read. The run summary does not, so on
       # failure the tail of the build output is copied there where it can be
       # read (and pasted) without signing in. GitHub masks secret values.
