@@ -1,15 +1,19 @@
 name: Build APK
 
-# Every push to main builds, so a broken build is caught immediately.
-# Pushing a tag additionally publishes a Release, which is what Obtainium watches.
+# The Gradle project lives in the vitals/ subfolder, so every build step runs
+# with that as its working directory.
 on:
   push:
-    branches: [main]
+    branches: [main, master]
     tags: ['v*']
   workflow_dispatch:
 
 permissions:
   contents: write
+
+defaults:
+  run:
+    working-directory: vitals
 
 jobs:
   build:
@@ -28,6 +32,8 @@ jobs:
       - uses: android-actions/setup-android@v3
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          build-root-directory: vitals
 
       # GitHub secrets hold text, not files, so the keystore travels base64-encoded.
       - name: Restore keystore
@@ -35,13 +41,13 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::KEYSTORE_BASE64 secret is empty. Add it under Settings → Secrets and variables → Actions."
+            echo "::error::KEYSTORE_BASE64 secret is empty. Add it under Settings then Secrets and variables then Actions."
             exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > app/release.jks
           echo "Keystore restored ($(stat -c%s app/release.jks) bytes)"
 
-      # Same file the app reads locally. Missing keys are fine — the voice and
+      # Same file the app reads locally. Missing keys are fine - the voice and
       # label features simply stay inactive.
       - name: Write local.properties
         run: |
@@ -60,7 +66,7 @@ jobs:
           # Monotonic, so every build installs over the previous one.
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: ${{ github.ref_name }}
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon --stacktrace
 
       # Available on every build, tagged or not, so you can grab an APK without
       # cutting a release.
@@ -68,13 +74,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vitals-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          path: vitals/app/build/outputs/apk/release/app-release.apk
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/release/app-release.apk
+          files: vitals/app/build/outputs/apk/release/app-release.apk
           generate_release_notes: true
 
       - name: Remove keystore

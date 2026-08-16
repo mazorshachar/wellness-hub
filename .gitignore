@@ -1,0 +1,20 @@
+# Signing keys and secrets — must never reach a public repo
+keys/
+*.jks
+*.keystore
+keystore.properties
+keystore-base64.txt
+local.properties
+_to_delete/
+
+# Build output
+.gradle/
+build/
+*/build/
+**/build/
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
