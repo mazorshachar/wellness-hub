@@ -5,7 +5,9 @@ name: Build APK
 on:
   push:
     branches: [main, master]
-    tags: ['v*']
+    # Both cases: a tag typed as V1.2.0 would otherwise be silently ignored,
+    # publishing a release with no APK attached and no failed run to show why.
+    tags: ['v*', 'V*']
   workflow_dispatch:
 
 permissions:
