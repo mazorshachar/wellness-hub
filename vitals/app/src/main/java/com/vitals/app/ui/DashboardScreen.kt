@@ -22,6 +22,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -56,8 +61,19 @@ fun DashboardScreen(
     onInstallProvider: () -> Unit,
     onRefresh: () -> Unit,
 ) {
+    var tab by rememberSaveable { mutableStateOf(VitalsTab.Today) }
+
+    // A considered-but-not-eaten food. Lives here rather than in the ViewModel
+    // because it is a question about the screen, not a fact about the day, and
+    // it should not survive leaving the app.
+    var projection by remember { mutableStateOf<Projection?>(null) }
+    var whatIfOpen by remember { mutableStateOf(false) }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            VitalsNavigationBar(selected = tab, onSelect = { tab = it })
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -120,22 +136,70 @@ fun DashboardScreen(
                 onAction = onRefresh,
             )
 
-            is DashboardState.Ready -> SnapshotList(
-                snapshot = state.snapshot,
-                hasAnyData = state.hasAnyData,
-                foodEntries = foodEntries,
-                hasAudioPermission = hasAudioPermission,
-                scanningVoice = scanningVoice,
-                onRequestAudioPermission = onRequestAudioPermission,
-                onScanVoiceNotes = onScanVoiceNotes,
-                onConfirmEntry = onConfirmEntry,
-                onDeleteEntry = onDeleteEntry,
-                contentPadding = padding,
-                onOpenSettings = onOpenSettings,
-            )
+            is DashboardState.Ready -> when (tab) {
+                VitalsTab.Today -> SnapshotList(
+                    snapshot = state.snapshot,
+                    hasAnyData = state.hasAnyData,
+                    foodEntries = foodEntries,
+                    hasAudioPermission = hasAudioPermission,
+                    scanningVoice = scanningVoice,
+                    projection = projection,
+                    onOpenWhatIf = { whatIfOpen = true },
+                    onClearProjection = { projection = null },
+                    onRequestAudioPermission = onRequestAudioPermission,
+                    onScanVoiceNotes = onScanVoiceNotes,
+                    onConfirmEntry = onConfirmEntry,
+                    onDeleteEntry = onDeleteEntry,
+                    contentPadding = padding,
+                    onOpenSettings = onOpenSettings,
+                )
+
+                VitalsTab.Nutrition -> ComingSoon(
+                    title = "Nutrition",
+                    body = "Sugar, protein, sodium, iron and the rest as bars against " +
+                        "your targets, with a 3-dot menu to pick which ones you follow.",
+                    contentPadding = padding,
+                )
+
+                VitalsTab.Supplements -> ComingSoon(
+                    title = "Supplements",
+                    body = "Per-pill labels from a photo, one-tap templates like " +
+                        "\"lunch supplements\", and warnings when two things you took " +
+                        "together cancel each other out.",
+                    contentPadding = padding,
+                )
+
+                VitalsTab.Goal -> ComingSoon(
+                    title = "Goal",
+                    body = "Steady, moderate or aggressive loss — or your own number — " +
+                        "worked out from your age, weight and height, with a floor so " +
+                        "the target never goes somewhere unsafe.",
+                    contentPadding = padding,
+                )
+
+                VitalsTab.Settings -> ComingSoon(
+                    title = "Settings",
+                    body = "Health Connect permissions, voice logging, and the dial's " +
+                        "own look — sweep, thickness and colours.",
+                    contentPadding = padding,
+                )
+            }
         }
     }
+
+    if (whatIfOpen) {
+        WhatIfSheet(
+            onDismiss = { whatIfOpen = false },
+            onProject = { label, kcal ->
+                projection = Projection(label, kcal)
+                whatIfOpen = false
+            },
+        )
+    }
 }
+
+/** A food being considered, not eaten. */
+data class Projection(val label: String, val kcal: Float)
 
 @Composable
 private fun SnapshotList(
@@ -144,6 +208,9 @@ private fun SnapshotList(
     foodEntries: List<FoodEntry>,
     hasAudioPermission: Boolean,
     scanningVoice: Boolean,
+    projection: Projection?,
+    onOpenWhatIf: () -> Unit,
+    onClearProjection: () -> Unit,
     onRequestAudioPermission: () -> Unit,
     onScanVoiceNotes: () -> Unit,
     onConfirmEntry: (Long, Double) -> Unit,
@@ -165,6 +232,60 @@ private fun SnapshotList(
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // ---- Calorie balance dial ---------------------------------------
+        // Burn comes from Health Connect rather than an estimate. If nothing
+        // has written it yet the dial would be measuring against zero, which
+        // reads as a huge surplus — so the card says so instead of lying.
+        item {
+            val eaten = foodEntries.sumOf { it.kcal }.toFloat()
+            val burned = snapshot.today.totalCalories?.toFloat()
+
+            SectionCard(
+                title = "Calorie balance",
+                subtitle = burned?.let {
+                    "${eaten.roundToInt()} eaten · ${it.roundToInt()} burned"
+                } ?: "Waiting on burn data",
+            ) {
+                if (burned == null) {
+                    Text(
+                        "Nothing has written calories burned to Health Connect today. " +
+                            "Samsung Health usually fills this in after the first sync.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    val net = eaten - burned
+                    CalorieDial(
+                        net = net,
+                        projected = projection?.let { net + it.kcal },
+                        goalDeficit = null,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    if (projection != null) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "${projection.label} · +${projection.kcal.roundToInt()} kcal",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            OutlinedButton(onClick = onClearProjection) { Text("Clear") }
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = onOpenWhatIf,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("If I eat this…")
+                        }
+                    }
+                }
+            }
+        }
+
         if (!hasAnyData) {
             item {
                 SectionCard(
